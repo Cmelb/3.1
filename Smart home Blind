@@ -1,0 +1,88 @@
+/*
+ * final.c
+ *
+ * Created: 7/16/2023 3:12:44 AM
+ * Author : cmelb
+ */ 
+
+#ifndef F_CPU
+#define F_CPU 16000000UL //Utilizes the 16Mhz clock onboard the arduino
+#endif
+
+#include <avr/io.h>
+#include <avr/interrupt.h>	
+
+#define joystickPin PC0
+#define pwm1Pin PB1
+#define pwm2Pin PB2
+
+void ADC_Init()
+{
+	// Configure ADC reference voltage and left-adjusted result
+	ADMUX = (1 << REFS0) | (1 << ADLAR);
+
+	// Enable ADC and set ADC prescaler to 64
+	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1);
+}
+
+uint16_t ADC_Read(uint8_t channel)
+{
+	// Select ADC channel
+	ADMUX = (ADMUX & 0xF0) | (channel & 0x0F);
+
+	// Start ADC conversion
+	ADCSRA |= (1 << ADSC);
+
+	// Wait for conversion to complete
+	while (ADCSRA & (1 << ADSC))
+	;
+
+	// Return ADC result
+	return ADC;
+}
+
+void PWM_Init()
+{
+	// Configure PWM pins as outputs
+	DDRB |= (1 << pwm1Pin) | (1 << pwm2Pin);
+
+	// Configure Timer1 for Fast PWM mode
+	TCCR1A = (1 << COM1A1) | (1 << COM1B1) | (1 << WGM10);
+	TCCR1B = (1 << WGM12) | (1 << CS11);
+}
+
+void PWM_Write(uint8_t value)
+{
+	// Set PWM duty cycle
+	OCR1A = value;
+	OCR1B = 255 - value;
+}
+
+int main(void)
+{
+	// Initialize ADC and PWM
+	ADC_Init();
+	PWM_Init();
+
+	while (1)
+	{
+		// Read joystick value
+		uint16_t joystickValue = ADC_Read(joystickPin);
+		uint8_t motor_control = joystickValue >> 2;
+
+		if (motor_control > 127)
+		{
+			PORTB &= ~(1 << pwm2Pin);
+			PWM_Write(motor_control - 128);
+		}
+		else if (motor_control < 127)
+		{
+			PORTB &= ~(1 << pwm1Pin);
+			PWM_Write(127 - motor_control);
+		}
+		else
+		{
+			PORTB &= ~((1 << pwm1Pin) | (1 << pwm2Pin));
+		}
+	}
+}
